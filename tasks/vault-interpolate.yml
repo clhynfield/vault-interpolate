@@ -1,0 +1,74 @@
+platform: linux
+
+image_resource:
+  type: docker-image
+  source:
+    repository: images.company.io/platformteam/concourse
+    tag: latest
+
+inputs:
+- name: files
+# contains YAML files with extension `.yml`.
+# Each one of these files will have their values interpolated from Vault.
+# For examples, run: `spruce help merge`
+
+outputs:
+- name: interpolated-files
+# Contains only yaml files found and interpolated by this task.
+# Maintains the filestructure of the `files` input.
+
+params:
+
+  VAULT_USERNAME:
+  VAULT_PASSWORD:
+  VAULT_ADDR:
+  # - Required
+  # - Credentials to talk to Vault server
+
+  VAULT_SKIP_VERIFY: false
+  # - Optional
+  # - Please don't do this
+
+  PREFIX:
+  # - Required
+  # - Prefix flag used by Vault interpolate
+  #   e.g. platformteam/concourse/sandbox/
+
+  INTERPOLATION_PATHS: '.'
+  # - Required
+  # - Path the contains the files to read from
+  # - This is a space separated list of directories
+  #   the paths are all evaluated relative to files/
+
+run:
+  path: /bin/bash
+  args:
+  - "-c"
+  - |
+    set -euo pipefail
+
+    vault --version
+
+    vault login \
+      -method=ldap \
+      username="$VAULT_USERNAME" \
+      password="$VAULT_PASSWORD"
+
+    if [ -z "$PREFIX" ]; then
+      echo "Please specify a PREFIX. It is required."
+      exit 1
+    fi
+
+    export VAULT_PREFIX="$PREFIX"
+
+    # $INTERPOLATION_PATHS needs to be globbed to read multiple files
+    # shellcheck disable=SC2086
+    files=$(cd files && find $INTERPOLATION_PATHS -type f -name '*.yml' -follow)
+
+    for file in $files; do
+      echo "interpolating files/$file"
+      mkdir -p interpolated-files/"$(dirname "$file")"
+      spruce merge \
+      files/"$file" \
+      > interpolated-files/"$file"
+    done

@@ -1,0 +1,35 @@
+resources:
+  - name: pcf-repo
+    type: git
+    source:
+      uri: https://github.com/clhynfield/vault-interpolate.git
+      branch: master
+
+jobs:
+  - name: example-job-with-vault-interpolation
+    serial: true
+    plan:
+      - aggregate:
+          - get: pcf-repo
+      - task: interpolate-vars
+        file: pcf-repo/tasks/vault-interpolate.yml
+        params:
+          VAULT_USERNAME: ((vault_username))
+          VAULT_PASSWORD: ((vault_password))
+          VAULT_ADDR: ((vault_addr))
+          PREFIX: 'platformteam/concourse/sandbox/'
+          INTERPOLATION_PATHS: vars
+        input_mapping:
+          files: pcf-repo
+        output_mapping:
+          interpolated-files: interpolated-vars
+      - task: staged-config
+        image: platform-automation-image
+        file: platform-automation-tasks/tasks/staged-config.yml
+        input_mapping:
+          env: interpolated-vars
+        output_mapping:
+          generated-config: running-config
+        params:
+          ENV_FILE: vars/env.yml
+          PRODUCT_NAME: cf
